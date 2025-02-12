@@ -156,7 +156,11 @@ df_metadata_sib |>
 #ggtitle("Alpha diversity (Shannon PD) per area")
 
 # test area
-kruskal.test(Observed ~ area, data = df_metadata_sib) #p = 0.37 & 0.30 for Obs & Shannon
+kruskal.test(Observed ~ area, data = df_metadata_sib)
+#Obs chi-squared = 0.79963, p = 0.3712
+
+kruskal.test(Shannon ~ area, data = df_metadata_sib)
+#Shannon chi-squared = 1.0915, p = 0.2961
 
 # _ breeding status ----
 df_metadata_sib |>
@@ -238,6 +242,8 @@ ggplot(nmds_fort_siberian_f22, aes(x = NMDS1, y = NMDS2, colour = area)) + geom_
 
 # db-RDA ----
 # NB: order of rows in df_metadata & df_otus needs to match
+df_otus_sib = df_otus_sib |> column_to_rownames("rowname")
+
 # _ time pcnm ----
 # rda on julian
 mod_day = rda(df_otus_sib ~ julian, data = df_metadata_sib)
@@ -367,6 +373,7 @@ ggplot(rda_scores_sib_breeding_df, aes(x = CAP1, y = MDS1, colour = season, shap
 mod0_sib = capscale(df_otus_sib ~ 1, data = df_metadata_sib_time,  distance = "robust.aitchison", na.action = na.exclude)
 mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + age + breeding_status, data = df_metadata_sib_time, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM variables as these contain similar information as 'season' variable
 
+mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + area  + breeding_status + territory + ring_number + age + breeding_status, data = df_metadata_sib_time, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM 
 anova(mod1_sib) #p = 0.0001
 RsquareAdj(mod1_sib) #ajd R^2 = 0.04916868
 
