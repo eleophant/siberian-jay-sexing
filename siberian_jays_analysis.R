@@ -370,10 +370,9 @@ ggplot(rda_scores_sib_breeding_df, aes(x = CAP1, y = MDS1, colour = season, shap
 
 # _ model selection ----
 # run null and full models
-mod0_sib = capscale(df_otus_sib ~ 1, data = df_metadata_sib_time,  distance = "robust.aitchison", na.action = na.exclude)
-mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + age + breeding_status, data = df_metadata_sib_time, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM variables as these contain similar information as 'season' variable
+mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + age + breeding_status, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM variables as these contain similar information as 'season' variable
 
-mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + area  + breeding_status + territory + ring_number + age + breeding_status, data = df_metadata_sib_time, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM 
+mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + area  + breeding_status + territory + ring_number + age + breeding_status, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM 
 anova(mod1_sib) #p = 0.0001
 RsquareAdj(mod1_sib) #ajd R^2 = 0.04916868
 
@@ -486,7 +485,7 @@ df_metadata_w22_w23 = df_metadata_sib |> filter(season == "winter2022"| season =
 
 # _ season ----
 rda_sib_winters = capscale(formula = df_otus_w22_w23 ~ season, data = df_metadata_w22_w23,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_winters) #p = 0.066
+anova(rda_sib_winters) #F = 1.23, p = 0.066
 RsquareAdj(rda_sib_winters) #adj R^2 = 0.0095
 
 # core  ----
@@ -601,7 +600,7 @@ aldex.plot(season_aldex_all, type = "MW", test = "welch", main = "effect plot")
 
 # generate df of differentially abundant ASVs
 differential_asvs_season = season_aldex_all |> 
-  filter(we.eBH < 0.05) |> 
+  filter(wi.eBH < 0.05) |> 
   rownames_to_column("...1") |> 
   left_join(taxonomy_table, by = "...1") |> # add ASV taxonomical info
   replace_na(list(Genus = "")) |>
@@ -611,6 +610,18 @@ differential_asvs_season = season_aldex_all |>
   mutate(otu_scientific_name = as.factor(otu_scientific_name)) |> 
   mutate(ci_product = effect.low * effect.high ) |> #column that returns TRUE if CI does not contain 0# |> 
   mutate(ci_no_zero = ci_product > 0) #returns TRUE if CI does not include zero
+
+# extract results
+differential_asvs_season |> 
+  mutate(
+    summary_text = glue(
+      "{otu_scientific_name} was significantly different between conditions ",
+      "(effect = {round(effect, 2)}, ",
+      "adj. p = {signif(wi.eBH, 3)})."
+    )
+  ) %>%
+  #select(summary_text) |> 
+  print()
 
 # plot
 differential_asvs_season |> 
@@ -628,7 +639,7 @@ differential_asvs_season |>
         axis.text = element_text(size = 14),
         axis.text.y = element_text(face = "italic"))
 
-# _ w22 vs w23 ----
+6# _ w22 vs w23 ----
 # subset
 w22_w23 = siberian |> 
   subset_samples(season %in% c("winter2022", "winter2023"))
