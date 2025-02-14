@@ -120,13 +120,14 @@ siberian_norm = transform_sample_counts(siberian, standf)
 
 plot_bar(siberian_norm, fill = "Phylum") +
   geom_bar(aes(colour = Phylum, fill = Phylum), stat = "identity", position = "stack") +
-  labs(x = "sample", y = "normalized abundance") +
+  labs(x = "Sample", y = "Normalized abundance\n") +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   theme(legend.title = element_text(size = 12),
-        legend.text = element_text(size = 8),
-        axis.title = element_text(size = 14),
-        axis.text.x = element_text(size = 6)) +
+        legend.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 12)) +
   ggtitle("A")
 
 
@@ -137,17 +138,28 @@ significant_comparisons = list(
   c("winter2022", "fall2022"),
   c("winter2022", "winter2023"))
 
+# calculate sample sizes
+df_metadata_sib |> 
+  group_by(season) |> 
+  summarise(n = n())
+#fall2022 49, summer2022 8, winter2022 12, winter2023 13
+
+# set season order
+df_metadata_sib = df_metadata_sib |> 
+  mutate(season = fct_relevel(season, "winter2022", "summer2022", "fall2022", "winter2023"))
+
 df_metadata_sib |>
   ggplot(aes(x = season, y = Observed, fill = season))+
   geom_boxplot(size = 1) +
   geom_point() +
   theme(legend.position = "none",
-        axis.title = element_text(size = 14), axis.text = element_text(size = 14)) +
-  xlab("season") +
-  ylab("observed ASVs") +
-  scale_x_discrete(labels=c("winter2022" = "winter \n2022", "summer2022" = "summer \n2022", "fall2022" = "fall \n2022", "winter2023" = "winter \n2023")) +
+        axis.title = element_text(size = 12), axis.text = element_text(size = 12)) +
+  xlab("Season") +
+  ylab("Observed ASVs") +
+  scale_x_discrete(labels=c("winter2022" = "Winter \n2022", "summer2022" = "Summer \n2022", "fall2022" = "Fall \n2022", "winter2023" = "Winter \n2023")) +
   scale_fill_viridis_d(name = "season", labels = c("winter 2022", "summer 2022", "fall 2022", "winter 2023")) +
-  #add pairwise wilcox test
+  
+  # add pairwise wilcoxon test
   stat_compare_means(
     method = "wilcox.test",
     comparisons = significant_comparisons,
@@ -185,7 +197,7 @@ df_metadata_sib |>
   stat_compare_means(
     method = "kruskal.test",
     label = "p.signif", #use "p.format" for exact p-values
-  )+
+  ) +
   ggtitle("D")
 
 ## breeding status ----
@@ -289,18 +301,22 @@ rda_scores_sib_season_df = rda_sib_season |>
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
   left_join(df_metadata_sib, by = "study_id")
 
-ggplot(rda_scores_sib_season_df, aes(x = CAP1, y = CAP2, colour = season, shape = sample_type)) + 
+# set season order
+rda_scores_sib_season_df = rda_scores_sib_season_df |> 
+  mutate(season = fct_relevel(season, "winter2022", "summer2022", "fall2022", "winter2023"))
+
+ggplot(rda_scores_sib_season_df, aes(x = CAP1, y = CAP2, colour = season)) + 
   geom_point(size = 2) + 
   geom_vline(xintercept = 0, linetype = "dotted") + 
   geom_hline(yintercept = 0, linetype = "dotted") +
   scale_colour_viridis_d(
-    labels = c("winter2022" = "winter 2022", 
-               "summer2022" = "summer 2022", 
-               "fall2022" = "fall 2022",
-               "winter2023" = "winter 2023")) +
+    labels = c("winter2022" = "Winter 2022", 
+               "summer2022" = "Summer 2022", 
+               "fall2022" = "Fall 2022",
+               "winter2023" = "Winter 2023")) +
   labs(
-    colour = "season", 
-    shape = "sample type",
+    colour = "Season", 
+    #shape = "sample type",
     x = "CAP1 (5.74%)", 
     y = "CAP2 (1.68%)"
   ) +
@@ -331,7 +347,7 @@ aldex.plot(season_aldex_all, type = "MW", test = "welch", main = "effect plot")
 
 # generate df of differentially abundant ASVs
 differential_asvs_season = season_aldex_all |> 
-  filter(we.eBH < 0.05) |> 
+  filter(wi.eBH < 0.05) |> 
   rownames_to_column("...1") |> 
   left_join(taxonomy_table, by = "...1") |> # add ASV taxonomical info
   replace_na(list(Genus = "")) |>
@@ -356,7 +372,7 @@ differential_asvs_season |>
         axis.text = element_text(size = 14),
         axis.text.y = element_text(face = "italic"),
         aspect.ratio = 1/3) +
-  scale_colour_viridis_d() +
+  scale_colour_manual(values = c("darkorchid", "darkorange")) +
   ggtitle("B")
 
 
@@ -373,17 +389,16 @@ det = c(0, 0.1, 0.5, 2, 5)/100
 
 # define a common theme for all plots
 core_common_theme = theme_classic() +
-  theme(axis.text.y = element_text(face = "italic"),
-        legend.position = "none")
+  theme(axis.text.y = element_text(face = "italic"))
 
-create_heatmap_plot <- function(pseq_data, prevalences, detections) {
+create_heatmap_plot = function(pseq_data, prevalences, detections) {
   plot_core(pseq_data,
             plot.type = "heatmap",
             prevalences = prevalences,
             detections = det, 
             min.prevalence = .75)}
 
-customize_plot <- function(plot, title) {
+customize_plot = function(plot, title) {
   plot + 
     core_common_theme + 
     ggtitle(title) +
@@ -397,27 +412,31 @@ customize_plot <- function(plot, title) {
 }
 
 ## all seasons ----
-core_gen_all_seasons <- create_heatmap_plot(siberian_rel_genus, prevalences, det)
-core_gen_all_seasons <- customize_plot(core_gen_all_seasons, "All seasons") #(n = 82)
+core_gen_all_seasons = create_heatmap_plot(siberian_rel_genus, prevalences, det)
+core_gen_all_seasons = customize_plot(core_gen_all_seasons, "All seasons") #(n = 82)
 core_gen_all_seasons
 
 ## by season ----
-core_gen_w22 <- subset_samples(siberian_rel_genus, season == "winter2022") 
-core_gen_w22 <- create_heatmap_plot(core_gen_w22, prevalences, det)
-core_gen_w22 <- customize_plot(core_gen_w22, "Winter 2022") #(n = 12)
+core_gen_w22 = subset_samples(siberian_rel_genus, season == "winter2022") 
+core_gen_w22 = create_heatmap_plot(core_gen_w22, prevalences, det)
+core_gen_w22 = customize_plot(core_gen_w22, "Winter 2022") #(n = 12)
 core_gen_w22
 
-core_gen_s22 <- subset_samples(siberian_rel_genus, season == "summer2022") 
-core_gen_s22 <- create_heatmap_plot(core_gen_s22, prevalences, det)
-core_gen_s22 <- customize_plot(core_gen_s22, "Summer 2022") #(n = 8)
+core_gen_s22 = subset_samples(siberian_rel_genus, season == "summer2022") 
+core_gen_s22 = create_heatmap_plot(core_gen_s22, prevalences, det)
+core_gen_s22 = customize_plot(core_gen_s22, "Summer 2022") #(n = 8)
 core_gen_s22
 
-core_gen_f22 <- subset_samples(siberian_rel_genus, season == "fall2022") 
-core_gen_f22 <- create_heatmap_plot(core_gen_f22, prevalences, det)
-core_gen_f22 <- customize_plot(core_gen_f22, "Fall 2022") #(n = 49)
+core_gen_f22 = subset_samples(siberian_rel_genus, season == "fall2022") 
+core_gen_f22 = create_heatmap_plot(core_gen_f22, prevalences, det)
+core_gen_f22 = customize_plot(core_gen_f22, "Fall 2022") #(n = 49)
 core_gen_f22
 
-core_gen_w23 <- subset_samples(siberian_rel_genus, season == "fall2022") 
-core_gen_w23 <- create_heatmap_plot(core_gen_w23, prevalences, det)
-core_gen_w23 <- customize_plot(core_gen_w23, "Winter 2023") #(n = 13)
+core_gen_w23 = subset_samples(siberian_rel_genus, season == "fall2022") 
+core_gen_w23 = create_heatmap_plot(core_gen_w23, prevalences, det)
+core_gen_w23 = customize_plot(core_gen_w23, "Winter 2023") #(n = 13)
 core_gen_w23
+
+core_all = (core_gen_w22 | core_gen_s22) /
+  (core_gen_f22 | core_gen_w23)
+core_all
