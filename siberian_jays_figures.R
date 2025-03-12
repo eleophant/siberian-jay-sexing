@@ -8,8 +8,7 @@
 library(tidyverse)
 library(viridis)
 library(patchwork)
-library(ggmap)
-library(ggspatial)
+library(leaflet)
 library(sf)
 library(ggpubr)
 library(cowplot)
@@ -53,11 +52,8 @@ territories = df_metadata_sib |>
   distinct(longitude, latitude)
 
 ## main map ----
-# define the map center
-map = get_map(location = map_center, zoom = 10, maptype = "satellite", source = "google")
-
 # create a data frame for site coordinates
-sites = data.frame(longitude, latitude)
+sites = territories |> select(longitude, latitude)
 
 # calculate reivo vs managed means
 north_cluster = sites |>  filter(latitude > 65.74) |>  summarize(
@@ -75,42 +71,48 @@ clusters = rbind(
   cbind(south_cluster, label = "managed")
 )
 
-# map
-main_map = ggmap(map) +
-  # add territory points
-  geom_point(data = sites, aes(x = longitude, y = latitude), color = "white", size = 3, alpha = 0.5) +
-  geom_text(data = clusters, aes(x = longitude, y = latitude, label = label), 
-            nudge_y = 0.04, color = "white", size = 4) +
+# main map 
+leaflet(data = clusters, options = leafletOptions(zoomControl = FALSE))  |>
+  addProviderTiles(providers$Esri.WorldImagery)  |>
   
-  # move the scale bar to the bottom left
-  scale_bar(x = 18.78, y = 65.58, distance_km = 10, text_offset = 0.018, color = "white") +
+  # Add points for roost sites (fully white circles)
+  addCircleMarkers(~longitude, ~latitude, label = ~label, 
+                   color = "white",      # White border
+                   fillColor = "white",  # White fill
+                   fillOpacity = 1,      # Fully opaque fill
+                   radius = 5,
+                   labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE,
+                                               direction = "top",
+                                               style = list("color" = "white", "font-size" = "16px"))
+  ) |> 
+  # add scale bar
+  addScaleBar(position = "bottomright", 
+              options = scaleBarOptions(imperial = FALSE, metric = TRUE, maxWidth = 200))  |>
   
-  # add north arrow
-  annotation_north_arrow(
-    location = "br",  # bottom right corner
-    which_north = "true",  # true north
-    style = north_arrow_orienteering(line_width = 0, fill = c("white", "white"), text_size = 8, text_col = "white")) +
-  theme(axis.title = element_text(size = 14), axis.text = element_text(size = 14)) +
-  labs(x = "Longitude", y = "Latitude") +
-  theme_minimal()
+  # adjust scale bar colour
+  htmlwidgets::onRender('
+    function(el, x) {
+      var scaleBar = document.querySelector(".leaflet-control-scale-line");
+      scaleBar.style.backgroundColor = "white";
+      scaleBar.style.borderColor = "white";
+    }
+  ')
 
-main_map
+# Sweden map
+arvidsjaur_lon = 19.17
+arvidsjaur_lat = 65.56
 
+leaflet(options = leafletOptions(zoomControl = FALSE))  |>
+  addProviderTiles(providers$Esri.WorldImagery)  |>
+  addCircleMarkers(lng = arvidsjaur_lon, lat = arvidsjaur_lat, 
+                   color = "white", 
+                   fill = TRUE,
+                   fillColor = "white",
+                   fillOpacity = 1,
+                   radius = 6,
+                   stroke = FALSE) |>
+  setView(lng = arvidsjaur_lon, lat = arvidsjaur_lat, zoom = 2.4)
 
-## inset ----
-inset_satellite_map = get_map(
-  location = c(longitude = 14.6, latitude = 62),  # center of Sweden
-  zoom = 5,
-  maptype = "satellite",
-  source = "google")
-
-inset_map = ggmap(inset_satellite_map) +
-  # add a point for the study area
-  geom_point(data = data.frame(x = 19.12656, y = 65.78662), 
-             aes(x = x, y = y), color = "white", size = 5, alpha = 0.8) +
-  theme_void()
-
-inset_map
 
 # 2A) rel ab ----
 ## normalize number of reads using media sequencing depth
