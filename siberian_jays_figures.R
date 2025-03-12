@@ -78,9 +78,9 @@ leaflet(data = sites, options = leafletOptions(zoomControl = FALSE))  |>
   # Add points for roost sites (fully white circles)
   addCircleMarkers(~longitude, ~latitude,
                    #label = ~label, 
-                   color = "white",      # White border
-                   fillColor = "white",  # White fill
-                   fillOpacity = 1,      # Fully opaque fill
+                   color = "NA",
+                   fillColor = "white",
+                   fillOpacity = 0.5,
                    radius = 7,
                    labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE,
                                                direction = "top",
