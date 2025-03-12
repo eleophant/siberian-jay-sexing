@@ -76,7 +76,8 @@ leaflet(data = clusters, options = leafletOptions(zoomControl = FALSE))  |>
   addProviderTiles(providers$Esri.WorldImagery)  |>
   
   # Add points for roost sites (fully white circles)
-  addCircleMarkers(~longitude, ~latitude, label = ~label, 
+  addCircleMarkers(~longitude, ~latitude,
+                   #label = ~label, 
                    color = "white",      # White border
                    fillColor = "white",  # White fill
                    fillOpacity = 1,      # Fully opaque fill
