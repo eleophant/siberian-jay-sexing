@@ -72,7 +72,7 @@ clusters = rbind(
 )
 
 # main map 
-leaflet(data = clusters, options = leafletOptions(zoomControl = FALSE))  |>
+leaflet(data = sites, options = leafletOptions(zoomControl = FALSE))  |>
   addProviderTiles(providers$Esri.WorldImagery)  |>
   
   # Add points for roost sites (fully white circles)
@@ -81,7 +81,7 @@ leaflet(data = clusters, options = leafletOptions(zoomControl = FALSE))  |>
                    color = "white",      # White border
                    fillColor = "white",  # White fill
                    fillOpacity = 1,      # Fully opaque fill
-                   radius = 5,
+                   radius = 7,
                    labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE,
                                                direction = "top",
                                                style = list("color" = "white", "font-size" = "16px"))
