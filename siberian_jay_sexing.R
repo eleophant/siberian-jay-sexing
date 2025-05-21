@@ -34,7 +34,7 @@ sexing |>
     .groups = "drop") |> #ungroup
   filter(sex_consistent == FALSE) #9 rows are discrepant
 
-# 9/25 duplicates are discrepant: 36% error rate
+# 9/34 duplicates are discrepant: 26% error rate
 
 # my metadata ----
 # get all ring numbers from metadata 1 and 2
