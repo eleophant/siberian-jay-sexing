@@ -77,6 +77,8 @@ df_otus_sib |> sum() #5,203,835
 # number of reads per sample
 mean(rowSums(df_otus_sib)) #63,461.4
 sd(rowSums(df_otus_sib)) #75,545.91
+max(rowSums(df_otus_sib)) #432,235
+min(rowSums(df_otus_sib)) #42
 
 # number of ASVs per sample
 # number of non-zero rows for each column is the number of ASVs for that sample
@@ -88,6 +90,8 @@ total_asvs = df_otus_sib |>
 
 mean(total_asvs$value) #99
 sd(total_asvs$value) #83
+max(total_asvs$value) #441
+min(total_asvs$value) #11
 
 # relative abundances ---- 
 # normalize number of reads using median sequencing depth
@@ -187,9 +191,9 @@ df_metadata_sib |>
   xlab("Age") + ylab("Observed ASVs") #+
 #ggtitle("Alpha diversity (Observed ASVs) vs age") +
 
+kruskal.test(Shannon ~ age, data = df_metadata_sib) #Shannon KW chi-squared = 0.36564, df = 1, p = 0.5454
 
-kruskal.test(Shannon ~ age, data = df_metadata_sib) #p = 0.44 & 0.54 for Obs & Shannon
-
+kruskal.test(Observed ~ age, data = df_metadata_sib) #Observed KW chi-squared = 0.60555, df = 1, p = 0.4365
 
 # _ territory f22 ----
 df_metadata_sib |>
