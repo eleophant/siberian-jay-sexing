@@ -11,6 +11,7 @@ library(tidyverse)
 library(conflicted)
 library(phyloseq)
 library(fantaxtic)
+library(data.table)
 library(ggordiplots)
 library(ggvegan)
 library(eulerr)
@@ -24,7 +25,7 @@ conflicted::conflicts_prefer(dplyr::filter())
 conflicted::conflicts_prefer(dplyr::select())
 
 # data input ----
-df_metadata_sib = read_csv("df_metadata_sib_no_duplicates.csv")
+df_metadata_sib = read_csv("df_metadata_sib_no_duplicates_filtered.csv")
 df_otus_sib = read_csv("df_otus_sib_no_duplicates.csv")
 taxonomy_table = read_csv("jay_otu_taxonomy_table.csv")
 territory_sizes_f22 = read_csv("territories_f22.csv")
@@ -35,6 +36,34 @@ df_metadata_sib |> distinct(ring_number, date, .keep_all = TRUE) #there are none
 # generate otu matrix
 df_otus_sib = df_otus_sib |> column_to_rownames("rowname")
 
+# otu cleanup ----
+# pull Chloroplast and Mitochondria
+chlo_mito_seqs = taxonomy_table |> 
+  filter(Order == "Chloroplast" | Family == "Mitochondria") |> 
+  pull(...1)
+
+# remove Chloroplast and Mitochondria from df_otus_sib
+chlo_mito_seqs_valid <- intersect(chlo_mito_seqs, colnames(df_otus_sib))
+
+df_otus_sib_filtered = df_otus_sib |> 
+  as.data.frame() |> 
+  select(-all_of(chlo_mito_seqs_valid))
+
+# check for dataset-wide singletons
+asv_total_counts = colSums(df_otus_sib_filtered) #there are 2
+
+# get dataset-wide singletons
+singleton_asvs = asv_total_counts[asv_total_counts == 1]
+
+# view singletons
+names(singleton_asvs)
+
+# remove singletons from df_otus
+df_otus_sib_filtered_no_singletons = df_otus_sib_filtered |> 
+  select(-all_of(singleton_asvs))
+
+write_csv(df_otus_sib_filtered_no_singletons, "df_otus_filtered.csv")
+
 # subset fall22 ----
 # subset metadata
 df_metadata_sib_f22 = df_metadata_sib |> filter(season == "fall2022")
@@ -42,11 +71,11 @@ df_metadata_sib_f22 = df_metadata_sib_f22 |> left_join(territory_sizes_f22, by =
 
 # subset otus
 samples_f22 = df_metadata_sib |> filter(season == "fall2022") |> pull(study_id)
-df_otus_sib_f22 = df_otus_sib |> as.data.frame() |> rownames_to_column() |> filter(rowname %in% samples_f22) |> column_to_rownames("rowname")
+df_otus_sib_f22 = df_otus_sib_filtered_no_singletons |> as.data.frame() |> rownames_to_column() |> filter(rowname %in% samples_f22) |> column_to_rownames("rowname")
 df_otus_sib_f22 = df_otus_sib_f22[,-(which(colSums(df_otus_sib_f22) == 0))]
 
 # phyloseq ----
-otu = df_otus_sib |> t()
+otu = df_otus_sib_filtered_no_singletons |> t()
 otu = otu_table(otu, taxa_are_rows = TRUE)
 tax = taxonomy_table |> column_to_rownames("...1")
 tax = tax_table(as.matrix(tax))
@@ -72,26 +101,29 @@ df_metadata_sib |> group_by(breeding_status) |> summarise(n = n()) #breeder 31, 
 
 # reads & ASVs ----
 # total number of reads
-df_otus_sib |> sum() #5,203,835
+df_otus_sib_filtered |> sum() #4,914,463
 
 # number of reads per sample
-mean(rowSums(df_otus_sib)) #63,461.4
-sd(rowSums(df_otus_sib)) #75,545.91
-max(rowSums(df_otus_sib)) #432,235
-min(rowSums(df_otus_sib)) #42
+mean(rowSums(df_otus_sib_filtered)) #59,932.48
+sd(rowSums(df_otus_sib_filtered)) #73,469.08
+max(rowSums(df_otus_sib_filtered)) #401,123
+min(rowSums(df_otus_sib_filtered)) #42
+
+# number of ASVs
+df_otus_sib_filtered |> ncol() #3330
 
 # number of ASVs per sample
 # number of non-zero rows for each column is the number of ASVs for that sample
 # samples need to be in columns
-total_asvs = df_otus_sib |> 
+total_asvs = df_otus_sib_filtered |> 
   t() |> as.data.frame() |> 
   summarise(across(starts_with("KCG"), ~ sum(.x != 0))) |> 
   pivot_longer(cols = everything()) 
 
-mean(total_asvs$value) #99
-sd(total_asvs$value) #83
-max(total_asvs$value) #441
-min(total_asvs$value) #11
+mean(total_asvs$value) #88.84146
+sd(total_asvs$value) #78.36248
+max(total_asvs$value) #406
+min(total_asvs$value) #9
 
 # relative abundances ---- 
 # normalize number of reads using median sequencing depth
@@ -118,13 +150,37 @@ plot_nested_bar(ps_obj = top_asv$ps_obj,
                 nested_level = "Genus")
 
 # alpha diversity ----
+
+# if df_metadata_sib_no_duplicates_filtered.csv was loaded, these steps have already been done
+
+# _ adiv data ----
+adiv = plot_richness(siberian, measures=c("Observed", "Chao1", "Shannon", "Simpson"))
+
+# store alpha diversity measures as new variables
+alphadiv = data.table(adiv$data)
+
+# create tibble with adiv measures for each sample
+alphadiv = alphadiv |> 
+  select(mcmaster_sample_id, samples, variable, value) |> 
+  pivot_wider(names_from = variable, values_from = value) |> 
+  mutate(mcmaster_sample_id = as.character(mcmaster_sample_id))
+
+# bind to existing metadata
+alphadiv$mcmaster_sample_id = as.numeric(alphadiv$mcmaster_sample_id)
+
+# merge to metadata
+df_metadata_sib = df_metadata_sib |> 
+  left_join(alphadiv, by = "mcmaster_sample_id")
+
+write_csv(df_metadata_sib2, "df_metadata_sib_no_duplicates_filtered.csv")
+
 # _ time ----
 df_metadata_sib |>
   ggplot(aes(x = julian, y = Observed, color = territory))+
   geom_point(size = 1) +
   ggtitle("Alpha diversity (Observed ASVs) over time")
 
-kruskal.test(Observed ~ julian, data = df_metadata_sib) #p = 0.55
+kruskal.test(Observed ~ julian, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 36.258, df = 38, p-value = 0.5502
 
 # _ season ----
 season_order <- c('winter2022', 'summer2022', 'fall2022','winter2023') 
@@ -141,10 +197,9 @@ df_metadata_sib |>
   ggplot(aes(x = season, y = Shannon, color = season)) +
   geom_boxplot(size = 1)
 
-kruskal.test(Observed ~ season, data = df_metadata_sib)
-#Obs chi-squared = 12.376, p-value = 0.006199
-kruskal.test(Shannon ~ season, data = df_metadata_sib)
-#Shannon chi-squared = 3.4669, p-value = 0.3251
+kruskal.test(Observed ~ season, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 9.7141, df = 3, p-value = 0.02116
+
+kruskal.test(Shannon ~ season, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 4.4473, df = 3, p-value = 0.217
 
 pairwise.wilcox.test(df_metadata_sib$Observed, df_metadata_sib$season, p.adjust.method = "bonferroni") #only diffs bw winter22 & fall22, winter22 & winter23; no diffs when testing Shannon
 
@@ -160,11 +215,9 @@ df_metadata_sib |>
 #ggtitle("Alpha diversity (Shannon PD) per area")
 
 # test area
-kruskal.test(Observed ~ area, data = df_metadata_sib)
-#Obs chi-squared = 0.79963, p = 0.3712
+kruskal.test(Observed ~ area, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 1.0145, df = 1, p-value = 0.3138
 
-kruskal.test(Shannon ~ area, data = df_metadata_sib)
-#Shannon chi-squared = 1.0915, p = 0.2961
+kruskal.test(Shannon ~ area, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 0.42178, df = 1, p-value = 0.5161
 
 # _ breeding status ----
 df_metadata_sib |>
@@ -182,7 +235,9 @@ df_metadata_sib |>
   xlab("Breeding status")
 
 # test alpha diversity by breeding status
-kruskal.test(Shannon ~ breeding_status, data = df_metadata_sib) #p = 0.16, 0.43 for Obs & Shannon
+kruskal.test(Observed ~ breeding_status, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 1.4755, df = 1, p-value = 0.2245
+
+kruskal.test(Shannon ~ breeding_status, data = df_metadata_sib) #Kruskal-Wallis chi-squared = 0.084972, df = 1, p-value = 0.7707
 
 # _ age ----
 df_metadata_sib |>
@@ -255,7 +310,7 @@ anova(mod_day) #p = 0.001
 RsquareAdj(mod_day) #R^2 = 0.05325495
 
 # generate pcnm
-pcnm_time = df_metadata_sib |> select(julian) |> dist(method = "euclidean") |> pcnm()
+pcnm_time = df_metadata_sib |> select(julian) |> compositions::dist(method = "euclidean") |> pcnm()
 df_metadata_sib_time = df_metadata_sib |> cbind(pcnm_time[["vectors"]])
 
 # rda on pcnm
@@ -416,8 +471,8 @@ anova(rda_sib_area_f22) #0.191
 
 # _ territory ----
 rda_sib_territory_f22 = capscale(formula = df_otus_sib_f22 ~ territory, data = df_metadata_sib_f22,  distance = "robust.aitchison", na.action = na.exclude) 
-anova(rda_sib_territory_f22) #F = 1.2675, p = 0.043
-RsquareAdj(rda_sib_territory_f22) #adj R^2 = 0.135
+anova(rda_sib_territory_f22) #F = 1.3473, p = 0.023
+RsquareAdj(rda_sib_territory_f22) #adj R^2 = 0.1684623
 
 rda_scores_sib_territory_df_f22 = rda_sib_territory_f22 |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -435,13 +490,14 @@ samples_f22_uniq = df_metadata_sib_f22_uniq |> pull(rowname)
 df_otus_sib_f22_uniq = df_otus_sib_f22 |> rownames_to_column() |> filter(rowname %in% samples_f22_uniq) |> column_to_rownames("rowname")
 
 rda_sib_territory_f22_uniq = capscale(formula = df_otus_sib_f22_uniq ~ territory, data = df_metadata_sib_f22_uniq,  distance = "robust.aitchison", na.action = na.exclude) 
-anova(rda_sib_territory_f22_uniq) #F = 1.2675, p = 0.036
-RsquareAdj(rda_sib_territory_f22_uniq) #adj R^2 = 0.143
+anova(rda_sib_territory_f22_uniq) #F = 1.3685, p = 0.03
+RsquareAdj(rda_sib_territory_f22_uniq) #adj R^2 = 0.1800064
 
 rda_scores_sib_territory_df_f22_uniq = rda_sib_territory_f22_uniq |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
   left_join(df_metadata_sib_f22_uniq, by = "study_id")
 
+# plots
 ggplot(rda_scores_sib_territory_df_f22_uniq, aes(x = CAP1, y = CAP2, colour = territory)) + geom_point(size = 2)
 
 gg_ordiplot(rda_scores_sib_territory_df_f22_uniq, groups = df_metadata_sib_f22_uniq$territory, hull = FALSE, label = FALSE, spiders = TRUE, ellipse = FALSE, pt.size = 2, plot = TRUE)
