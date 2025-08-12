@@ -43,7 +43,7 @@ chlo_mito_seqs = taxonomy_table |>
   pull(...1)
 
 # remove Chloroplast and Mitochondria from df_otus_sib
-chlo_mito_seqs_valid <- intersect(chlo_mito_seqs, colnames(df_otus_sib))
+chlo_mito_seqs_valid = intersect(chlo_mito_seqs, colnames(df_otus_sib))
 
 df_otus_sib_filtered = df_otus_sib |> 
   as.data.frame() |> 
@@ -62,7 +62,11 @@ names(singleton_asvs)
 df_otus_sib_filtered_no_singletons = df_otus_sib_filtered |> 
   select(-all_of(singleton_asvs))
 
-write_csv(df_otus_sib_filtered_no_singletons, "df_otus_filtered.csv")
+#write_csv(df_otus_sib_filtered_no_singletons, "df_otus_sib_filtered_no_singletons.csv")
+
+# overwrite df_otus_sib for downstream analysis
+df_otus_sib = df_otus_sib_filtered_no_singletons
+rm(df_otus_sib_filtered, df_otus_sib_filtered_no_singletons)
 
 # subset fall22 ----
 # subset metadata
@@ -71,11 +75,11 @@ df_metadata_sib_f22 = df_metadata_sib_f22 |> left_join(territory_sizes_f22, by =
 
 # subset otus
 samples_f22 = df_metadata_sib |> filter(season == "fall2022") |> pull(study_id)
-df_otus_sib_f22 = df_otus_sib_filtered_no_singletons |> as.data.frame() |> rownames_to_column() |> filter(rowname %in% samples_f22) |> column_to_rownames("rowname")
+df_otus_sib_f22 = df_otus_sib |> as.data.frame() |> rownames_to_column() |> filter(rowname %in% samples_f22) |> column_to_rownames("rowname")
 df_otus_sib_f22 = df_otus_sib_f22[,-(which(colSums(df_otus_sib_f22) == 0))]
 
 # phyloseq ----
-otu = df_otus_sib_filtered_no_singletons |> t()
+otu = df_otus_sib |> t()
 otu = otu_table(otu, taxa_are_rows = TRUE)
 tax = taxonomy_table |> column_to_rownames("...1")
 tax = tax_table(as.matrix(tax))
@@ -101,29 +105,29 @@ df_metadata_sib |> group_by(breeding_status) |> summarise(n = n()) #breeder 31, 
 
 # reads & ASVs ----
 # total number of reads
-df_otus_sib_filtered |> sum() #4,914,463
+df_otus_sib |> sum() #3,748,491
 
 # number of reads per sample
-mean(rowSums(df_otus_sib_filtered)) #59,932.48
-sd(rowSums(df_otus_sib_filtered)) #73,469.08
-max(rowSums(df_otus_sib_filtered)) #401,123
-min(rowSums(df_otus_sib_filtered)) #42
+mean(rowSums(df_otus_sib)) #45,713.3
+sd(rowSums(df_otus_sib)) #62,898.55
+max(rowSums(df_otus_sib)) #401,095
+min(rowSums(df_otus_sib)) #37
 
 # number of ASVs
-df_otus_sib_filtered |> ncol() #3330
+df_otus_sib |> ncol() #3331
 
 # number of ASVs per sample
 # number of non-zero rows for each column is the number of ASVs for that sample
 # samples need to be in columns
-total_asvs = df_otus_sib_filtered |> 
+total_asvs = df_otus_sib |> 
   t() |> as.data.frame() |> 
   summarise(across(starts_with("KCG"), ~ sum(.x != 0))) |> 
   pivot_longer(cols = everything()) 
 
-mean(total_asvs$value) #88.84146
-sd(total_asvs$value) #78.36248
-max(total_asvs$value) #406
-min(total_asvs$value) #9
+mean(total_asvs$value) #87.87805
+sd(total_asvs$value) #78.35191
+max(total_asvs$value) #405
+min(total_asvs$value) #8
 
 # relative abundances ---- 
 # normalize number of reads using median sequencing depth
@@ -154,7 +158,7 @@ plot_nested_bar(ps_obj = top_asv$ps_obj,
 # if df_metadata_sib_no_duplicates_filtered.csv was loaded, these steps have already been done
 
 # _ adiv data ----
-adiv = plot_richness(siberian, measures=c("Observed", "Chao1", "Shannon", "Simpson"))
+adiv = plot_richness(siberian, measures = c("Observed", "Chao1", "Shannon", "Simpson"))
 
 # store alpha diversity measures as new variables
 alphadiv = data.table(adiv$data)
@@ -306,8 +310,8 @@ df_otus_sib = df_otus_sib |> column_to_rownames("rowname")
 # _ time pcnm ----
 # rda on julian
 mod_day = rda(df_otus_sib ~ julian, data = df_metadata_sib)
-anova(mod_day) #p = 0.001
-RsquareAdj(mod_day) #R^2 = 0.05325495
+anova(mod_day) #p = 0.188
+RsquareAdj(mod_day) #R^2 = 0.00601124
 
 # generate pcnm
 pcnm_time = df_metadata_sib |> select(julian) |> compositions::dist(method = "euclidean") |> pcnm()
@@ -315,13 +319,13 @@ df_metadata_sib_time = df_metadata_sib |> cbind(pcnm_time[["vectors"]])
 
 # rda on pcnm
 mod_time = rda(df_otus_sib ~ PCNM1 + PCNM2 + PCNM3 + PCNM4, data = df_metadata_sib_time)
-anova(mod_time) #p = 0.014
-RsquareAdj(mod_time) #R^2 = 0.09793611
+anova(mod_time) #p = 0.06491308
+RsquareAdj(mod_time) #R^2 = 0.01633714
 
 # _ season ---- 
 rda_sib_season = capscale(formula = df_otus_sib ~ season, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
 anova(rda_sib_season) #F = 2.4539, p = 0.001
-RsquareAdj(rda_sib_season) #adj R^2 = 0.05109595
+RsquareAdj(rda_sib_season) #adj R^2 = 0.04018907
 
 rda_scores_sib_season_df = rda_sib_season |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -334,7 +338,7 @@ gg_ordiplot(rda_sib_season, groups = df_metadata_sib$season, hull = FALSE, label
 # _ dietary season ----
 rda_sib_diet_season = capscale(formula = df_otus_sib ~ dietary_season, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
 anova(rda_sib_diet_season) #p = 0.001
-RsquareAdj(rda_sib_diet_season) #adj R^2 = 0.0440196
+RsquareAdj(rda_sib_diet_season) #adj R^2 = 0.03577286
 
 rda_scores_sib_diet_season_df = rda_sib_diet_season |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -345,8 +349,8 @@ ggplot(rda_scores_sib_diet_season_df, aes(x = CAP1, y = CAP2, colour = dietary_s
 
 # _ sample type ----
 rda_sib_type = capscale(formula = df_otus_sib ~ sample_type, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_type) #p = 0.003
-RsquareAdj(rda_sib_type) #R^2 = 0.006811867
+anova(rda_sib_type) #p = 0.017
+RsquareAdj(rda_sib_type) #R^2 = 0.005495911
 
 rda_scores_sib_type_df = rda_sib_type |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |>
@@ -366,15 +370,15 @@ pcnm_dist = df_metadata_sib |> select(X, Y) |> dist(method = "euclidean") |> pcn
 df_metadata_sib_pcnm = df_metadata_sib |> cbind(pcnm_dist[["vectors"]])
 
 mod_spatial = rda(df_otus_sib ~ PCNM1 + PCNM2 + PCNM3 + PCNM4 + PCNM5 + PCNM6 + PCNM7 + PCNM8 + PCNM9 + PCNM10 + PCNM11 + PCNM12 + PCNM13, data = df_metadata_sib_pcnm)
-anova(mod_spatial) #p = 0.892
+anova(mod_spatial) #p = 0.912
 
 # _ location Y ----
 rda_sib_y = capscale(formula = df_otus_sib ~ Y, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_y) #p = 0.274
+anova(rda_sib_y) #p = 0.255
 
 # _ area ----
 rda_sib_area = capscale(formula = df_otus_sib ~ area, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude) 
-anova(rda_sib_area) #0.405
+anova(rda_sib_area) #p = 0.449
 
 rda_scores_sib_area_df = rda_sib_area |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -384,8 +388,8 @@ ggplot(rda_scores_sib_area_df, aes(x = CAP1, y = MDS1, colour = area, shape = se
 
 # _ territory ----
 rda_sib_territory = capscale(formula = df_otus_sib ~ territory, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude) 
-anova(rda_sib_territory) #0.062 - 0.085
-RsquareAdj(rda_sib_territory) #adj R^2 = 0.07047777
+anova(rda_sib_territory) #0.062 - 0.077
+RsquareAdj(rda_sib_territory) #adj R^2 = 0.07607335
 
 rda_scores_sib_territory_df = rda_sib_territory |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -396,12 +400,12 @@ ggplot(rda_scores_sib_territory_df, aes(x = CAP1, y = CAP2, colour = territory))
 # _ ring ----
 df_metadata_sib$ring_number = as.character(df_metadata_sib$ring_number)
 rda_sib_ring = capscale(formula = df_otus_sib ~ ring_number, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_ring) #p = 0.736
+anova(rda_sib_ring) #p = 0.659
 
 # _ age ----
 rda_sib_age = capscale(formula = df_otus_sib ~ age, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_age) #p = 0.016
-RsquareAdj(rda_sib_age) #adj R^2 = 0.005270814
+anova(rda_sib_age) #p = 0.008
+RsquareAdj(rda_sib_age) #adj R^2 = 0.005761799
 
 rda_scores_sib_age_df = rda_sib_age |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -409,17 +413,17 @@ rda_scores_sib_age_df = rda_sib_age |>
 
 ggplot(rda_scores_sib_age_df, aes(x = CAP1, y = MDS1, colour = season, shape = age)) + geom_point() #age is confounded by season
 
-gg_ordiplot(rda_sib_age, groups = df_metadata_sib$age, hull = FALSE, label = FALSE, spiders = TRUE, ellipse = FALSE, pt.size = 2, plot = TRUE) #CAP1 = 1.76% (no CAP2)
+gg_ordiplot(rda_sib_age, groups = df_metadata_sib$age, hull = FALSE, label = FALSE, spiders = TRUE, ellipse = FALSE, pt.size = 2, plot = TRUE) #CAP1 = 1.8% (no CAP2)
 
 # _ age fine ----
 rda_sib_age_fine = capscale(formula = df_otus_sib ~ age_fine, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_age_fine) #p = 0.189
+anova(rda_sib_age_fine) #p = 0.157
 
 # _ breeding status ----
 ## all breeders are adults, but non-breeders are both
 rda_sib_breeding = capscale(formula = df_otus_sib ~ breeding_status, data = df_metadata_sib,  distance = "robust.aitchison", na.action = na.exclude)
 anova(rda_sib_breeding) #p = 0.001
-RsquareAdj(rda_sib_breeding) #adj R^2 = 0.01127304
+RsquareAdj(rda_sib_breeding) #adj R^2 = 0.01128518
 
 rda_scores_sib_breeding_df = rda_sib_breeding |> 
   scores(display = "sites") |> as.data.frame() |> rownames_to_column() |> mutate(study_id = rowname) |> 
@@ -429,11 +433,11 @@ ggplot(rda_scores_sib_breeding_df, aes(x = CAP1, y = MDS1, colour = season, shap
 
 # _ model selection ----
 # run null and full models
-mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + age + breeding_status, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM variables as these contain similar information as 'season' variable
+mod0_sib = capscale(df_otus_sib ~ 1, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude)
 
-mod1_sib = capscale(formula = df_otus_sib ~ season + sample_type + area  + breeding_status + territory + ring_number + age + breeding_status, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM 
-anova(mod1_sib) #p = 0.0001
-RsquareAdj(mod1_sib) #ajd R^2 = 0.04916868
+mod1_sib = capscale(formula = df_otus_sib ~ season + breeding_status + age, data = df_metadata_sib, distance = "robust.aitchison", na.action = na.exclude) #omitted time PCNM 
+anova(mod1_sib) #p = 0.001
+RsquareAdj(mod1_sib) #ajd R^2 = 0.03627631
 
 # model selection on R^2 and p-values
 step_r2_sib = ordiR2step(mod0_sib, scope = formula(mod1_sib), perm.max = 999, na.action = na.exclude)
@@ -545,8 +549,8 @@ df_metadata_w22_w23 = df_metadata_sib |> filter(season == "winter2022"| season =
 
 # _ season ----
 rda_sib_winters = capscale(formula = df_otus_w22_w23 ~ season, data = df_metadata_w22_w23,  distance = "robust.aitchison", na.action = na.exclude)
-anova(rda_sib_winters) #F = 1.23, p = 0.066
-RsquareAdj(rda_sib_winters) #adj R^2 = 0.0095
+anova(rda_sib_winters) #F = 1.0827, p = 0.229
+RsquareAdj(rda_sib_winters) #adj R^2 = 0.00343522
 
 # core  ----
 # _ setup ----
@@ -602,7 +606,7 @@ core_gen_f22 <- create_heatmap_plot(core_gen_f22, prevalences, det)
 core_gen_f22 <- customize_plot(core_gen_f22, "Fall 2022") #(n = 49)
 core_gen_f22
 
-core_gen_w23 <- subset_samples(siberian_rel_genus, season == "fall2022") 
+core_gen_w23 <- subset_samples(siberian_rel_genus, season == "winter2023") 
 core_gen_w23 <- create_heatmap_plot(core_gen_w23, prevalences, det)
 core_gen_w23 <- customize_plot(core_gen_w23, "Winter 2023") #(n = 13)
 core_gen_w23
@@ -632,7 +636,7 @@ core_sp_f22 <- create_heatmap_plot(core_sp_f22, prevalences, det)
 core_sp_f22 <- customize_plot(core_sp_f22, "Fall 2022") #(n = 49)
 core_sp_f22
 
-core_sp_w23 <- subset_samples(siberian_rel_sp, season == "fall2022") 
+core_sp_w23 <- subset_samples(siberian_rel_sp, season == "winter2023") 
 core_sp_w23 <- create_heatmap_plot(core_sp_w23, prevalences, det)
 core_sp_w23 <- customize_plot(core_sp_w23, "Winter 2023") #(n = 13)
 core_sp_w23
@@ -660,7 +664,7 @@ aldex.plot(season_aldex_all, type = "MW", test = "welch", main = "effect plot")
 
 # generate df of differentially abundant ASVs
 differential_asvs_season = season_aldex_all |> 
-  filter(wi.eBH < 0.05) |> 
+  filter(we.eBH < 0.05) |> 
   rownames_to_column("...1") |> 
   left_join(taxonomy_table, by = "...1") |> # add ASV taxonomical info
   replace_na(list(Genus = "")) |>
@@ -699,7 +703,7 @@ differential_asvs_season |>
         axis.text = element_text(size = 14),
         axis.text.y = element_text(face = "italic"))
 
-6# _ w22 vs w23 ----
+# _ w22 vs w23 ----
 # subset
 w22_w23 = siberian |> 
   subset_samples(season %in% c("winter2022", "winter2023"))
